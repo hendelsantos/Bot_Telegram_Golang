@@ -1,0 +1,12 @@
+# Railway ignore file
+.git/
+.env
+*.db
+bot_estoque
+photos/
+vendor/
+docs/
+scripts/
+*.md
+LICENSE
+.gitignore
