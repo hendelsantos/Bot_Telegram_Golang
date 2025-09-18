@@ -2,7 +2,12 @@
 nixPkgs = ['go_1_21']
 
 [phases.build]
-cmds = ['go build -o bot_estoque ./cmd/main.go']
+cmds = [
+  'CGO_ENABLED=0 go build -ldflags="-w -s" -o bot_estoque ./cmd/main.go'
+]
 
 [start]
 cmd = './bot_estoque'
+
+[variables]
+CGO_ENABLED = '0'
