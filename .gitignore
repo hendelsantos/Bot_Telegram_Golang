@@ -1,0 +1,124 @@
+# Binários
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bot_estoque
+main
+
+# Arquivos de teste
+*.test
+
+# Output do compilador Go
+*.out
+
+# Dependências do módulo Go
+/vendor/
+
+# Arquivos de configuração local
+.env
+.env.local
+.env.production
+.env.test
+config.json
+config.yaml
+config.yml
+
+# Tokens e chaves de API (CRÍTICO)
+*token*
+*key*
+*secret*
+*.pem
+*.key
+*.crt
+
+# Arquivos de banco de dados local
+*.db
+*.sqlite
+*.sqlite3
+estoque.db
+
+# Logs
+*.log
+logs/
+log/
+
+# Arquivos temporários
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Diretórios de build
+build/
+dist/
+out/
+
+# Arquivos de backup
+*.bak
+*.backup
+*~
+
+# Arquivos do sistema operacional
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Arquivos de cobertura
+*.cover
+*.coverprofile
+coverage.txt
+coverage.html
+
+# Arquivos de profiling
+*.prof
+cpu.prof
+mem.prof
+
+# Diretórios de cache
+.cache/
+cache/
+
+# Arquivos de fotos/uploads
+photos/
+uploads/
+images/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+
+# Arquivos CSV gerados
+*.csv
+exports/
+
+# Certificados SSL
+*.crt
+*.pem
+*.p12
+*.pfx
+
+# Arquivos Docker locais (se houver)
+docker-compose.override.yml
+
+# Arquivos específicos do projeto
+scripts/criar_novo_bot.md
+
+# Arquivos de documentação sensível
+*password*
+*credentials*
+*auth*
