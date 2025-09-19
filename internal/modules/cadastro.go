@@ -3,107 +3,104 @@ package modules
 import (
 	"fmt"
 	"log"
-	"strings"
+	"strconv"
+	"time"
 
-	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"botgo/internal/db"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-type CadastroState struct {
-	Step      int
-	FotoPath  string
-	Nome      string
-	Descricao string
-	Qtd       int
+type UserStateCadastro struct {
+	Nome       string
+	Descricao  string
+	Quantidade string
+	FotoPath   string
+	Step       string
 }
 
-var userStates = make(map[int64]*CadastroState)
+var userStateCadastro = make(map[int64]*UserStateCadastro)
 
-func HandleNovoItem(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	userID := update.Message.From.ID
-	
-	// Se é um comando /novoitem, inicia o fluxo (não solicita foto imediatamente)
-	if update.Message.IsCommand() && update.Message.Command() == "novoitem" {
-		// Limpa qualquer estado anterior
-		delete(userStates, userID)
-		userStates[userID] = &CadastroState{Step: 0}
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Envie uma foto do item para cadastro.")
-		bot.Send(msg)
-		return
-	}
-	
-	// Se não existe estado, não está no fluxo de cadastro
-	state, exists := userStates[userID]
+func HandleNovoItem(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	chatID := message.Chat.ID
+	userStateCadastro[chatID] = &UserStateCadastro{Step: "nome"}
+	msg := tgbotapi.NewMessage(chatID, "📋 **Cadastro de Novo Item**\n\nQual o nome do item?")
+	msg.ParseMode = "Markdown"
+	bot.Send(msg)
+}
+
+func ProcessCadastroFlow(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	chatID := message.Chat.ID
+	state, exists := userStateCadastro[chatID]
 	if !exists {
 		return
 	}
 
 	switch state.Step {
-	case 0:
-		if len(update.Message.Photo) > 0 {
-			// Pegar a foto com melhor qualidade (última do array)
-			photos := update.Message.Photo
-			fileID := photos[len(photos)-1].FileID
-			
-			// Salvar o FileID para referência futura
-			photoPath := fmt.Sprintf("photos/items/%s.jpg", fileID)
-			state.FotoPath = photoPath
-			
-			state.Step++
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Foto recebida! Agora envie o nome do item.")
+	case "nome":
+		state.Nome = message.Text
+		state.Step = "descricao"
+		msg := tgbotapi.NewMessage(chatID, "Qual a descrição do item?")
+		bot.Send(msg)
+	case "descricao":
+		state.Descricao = message.Text
+		state.Step = "quantidade"
+		msg := tgbotapi.NewMessage(chatID, "Qual a quantidade inicial?")
+		bot.Send(msg)
+	case "quantidade":
+		state.Quantidade = message.Text
+		state.Step = "foto"
+		msg := tgbotapi.NewMessage(chatID, "Envie uma foto do item (ou digite 'pular').")
+		bot.Send(msg)
+	case "foto":
+		if message.Photo != nil && len(message.Photo) > 0 {
+			// Lógica para salvar a foto...
+			fileID := message.Photo[len(message.Photo)-1].FileID
+			state.FotoPath = fileID // Apenas um exemplo, idealmente faria o download
+			msg := tgbotapi.NewMessage(chatID, "Foto recebida!")
 			bot.Send(msg)
-			log.Printf("Foto recebida e processada com ID: %s", fileID)
-		} else {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Por favor, envie uma foto válida.")
+		} else if message.Text != "pular" {
+			msg := tgbotapi.NewMessage(chatID, "Por favor, envie uma foto ou digite 'pular'.")
 			bot.Send(msg)
+			return // Permanece no mesmo passo
 		}
-	case 1:
-		state.Nome = update.Message.Text
-		state.Step++
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Descrição/Observações?")
-		bot.Send(msg)
-	case 2:
-		state.Descricao = update.Message.Text
-		state.Step++
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Quantidade inicial?")
-		bot.Send(msg)
-	case 3:
-		var qtd int
-		_, err := fmt.Sscanf(update.Message.Text, "%d", &qtd)
-		if err != nil || qtd < 0 {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Quantidade inválida. Envie um número inteiro.")
+
+		// Finalizar cadastro
+		quantidade, err := strconv.Atoi(state.Quantidade)
+		if err != nil {
+			msg := tgbotapi.NewMessage(chatID, "❌ Quantidade inválida. O cadastro foi cancelado.")
 			bot.Send(msg)
+			delete(userStateCadastro, chatID)
 			return
 		}
-		state.Qtd = qtd
-		state.Step++
-		resumo := fmt.Sprintf("Resumo:\nNome: %s\nDescrição: %s\nQtd: %d\nConfirma? (sim/não)", state.Nome, state.Descricao, state.Qtd)
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, resumo)
-		bot.Send(msg)
-	case 4:
-		if strings.ToLower(update.Message.Text) == "sim" {
-			item := db.Item{
-				Nome:      state.Nome,
-				Descricao: state.Descricao,
-				Quantidade: state.Qtd,
-				Status:    "Em Estoque",
-				FotoPath:  state.FotoPath,
-			}
-			err := db.DB.Create(&item).Error
-			if err != nil {
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao salvar item.")
-				bot.Send(msg)
-				log.Println("Erro ao salvar item:", err)
-			} else {
-				db.RegistrarHistorico(item.ID, "Cadastro", "Item cadastrado no estoque")
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Item cadastrado com sucesso!")
-				bot.Send(msg)
-			}
-			delete(userStates, userID)
-		} else {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Cadastro cancelado.")
-			bot.Send(msg)
-			delete(userStates, userID)
+
+		item := db.Item{
+			Nome:       state.Nome,
+			Descricao:  state.Descricao,
+			Quantidade: quantidade,
+			Status:     "Em Estoque",
+			FotoPath:   state.FotoPath,
 		}
+
+		result := db.DB.Create(&item)
+		if result.Error != nil {
+			log.Printf("Erro ao salvar item: %v", result.Error)
+			msg := tgbotapi.NewMessage(chatID, "❌ Ocorreu um erro ao salvar o item.")
+			bot.Send(msg)
+		} else {
+			// Registrar movimentação
+			movimentacao := db.Movimentacao{
+				ItemID:    item.ID,
+				Tipo:      "cadastro",
+				Descricao: fmt.Sprintf("Item '%s' cadastrado com quantidade inicial %d.", item.Nome, item.Quantidade),
+				DataHora:  time.Now(),
+			}
+			db.DB.Create(&movimentacao)
+
+			msgText := fmt.Sprintf("✅ **Item Cadastrado com Sucesso!**\n\n**ID:** %d\n**Nome:** %s\n**Descrição:** %s\n**Quantidade:** %d", item.ID, item.Nome, item.Descricao, item.Quantidade)
+			msg := tgbotapi.NewMessage(chatID, msgText)
+			msg.ParseMode = "Markdown"
+			bot.Send(msg)
+		}
+		delete(userStateCadastro, chatID)
 	}
 }

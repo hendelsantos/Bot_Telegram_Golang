@@ -14,30 +14,30 @@ func HandleStart(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	bot.Send(msg)
 }
 
-func HandleMenu(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	mensagem := "📋 *Menu de Comandos*\n\n" +
-		"*Cadastro e Gestão*:\n" +
-		"/novoitem - Cadastrar novo item no estoque\n" +
-		"/buscar <palavra-chave> - Buscar itens por nome/descrição\n" +
-		"/atualizar <ID> - Atualizar informações de um item\n\n" +
-		"*Listagem e Visualização*:\n" +
-		"/listar - Lista todos os itens (paginado)\n" +
-		"/listar\\_resumo - Lista resumida (nome + quantidade)\n" +
-		"/listar\\_detalhado - Lista com informações completas\n" +
-		"/listar\\_status <status> - Lista por status específico\n" +
-		"/listar\\_baixo\\_estoque [limite] - Alerta de estoque baixo\n\n" +
-		"*Filtros Avançados*:\n" +
-		"/buscar status <status> - Buscar por status\n" +
-		"/buscar fornecedor <fornecedor> - Buscar por fornecedor\n" +
-		"/buscar data <DD/MM/AAAA> - Buscar por data\n\n" +
-		"*Controle de Reparos*:\n" +
-		"/enviar\\_reparo <ID> - Registrar envio para reparo\n" +
-		"/retornar\\_reparo <ID> - Registrar retorno de reparo\n\n" +
-		"*Relatórios e Histórico*:\n" +
-		"/exportar\\_estoque - Exportar lista em CSV\n" +
-		"/historico <ID> - Ver histórico de movimentações"
+// HandleMenu agora aceita chatID diretamente.
+func HandleMenu(bot *tgbotapi.BotAPI, chatID int64) {
+	text := `
+📋 *Menu de Comandos*
 
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, mensagem)
+*Cadastro e Gestão*:
+/novoitem - Cadastrar novo item
+/buscar <palavra> - Buscar itens
+/atualizar <ID> - Atualizar um item
+
+*Listagem e Visualização*:
+/listar - Listar todos os itens
+/listar_status <status> - Listar por status
+/listar_baixo_estoque - Itens com estoque baixo
+
+*Controle de Reparos*:
+/enviar_reparo <ID> - Registrar envio para reparo
+/retornar_reparo <ID> - Registrar retorno de reparo
+
+*Relatórios e Histórico*:
+/exportar_estoque - Exportar estoque em CSV
+/historico <ID> - Ver histórico de um item
+`
+	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "Markdown"
 	bot.Send(msg)
 }
