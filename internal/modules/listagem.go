@@ -4,28 +4,28 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"botgo/internal/db"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // ListarConfig define configurações para listagem
 type ListarConfig struct {
-	Limite     int
-	Pagina     int
-	Ordenacao  string
-	Filtros    map[string]interface{}
+	Limite    int
+	Pagina    int
+	Ordenacao string
+	Filtros   map[string]interface{}
 }
 
 // ResultadoListagem representa o resultado de uma consulta
 type ResultadoListagem struct {
-	Itens      []db.Item
-	Total      int64
-	Pagina     int
-	TotalPags  int
-	HasProx    bool
-	HasAnt     bool
+	Itens     []db.Item
+	Total     int64
+	Pagina    int
+	TotalPags int
+	HasProx   bool
+	HasAnt    bool
 }
 
 // HandleListagem gerencia todos os comandos de listagem
@@ -196,7 +196,7 @@ func buscarItensComPaginacao(config ListarConfig) (*ResultadoListagem, error) {
 		case "fornecedor":
 			query = query.Where("fornecedor LIKE ?", "%"+valor.(string)+"%")
 		}
-	}}
+	} // CORREÇÃO: Removida a chave extra aqui.
 
 	// Contar total
 	var total int64
