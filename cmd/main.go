@@ -1,51 +1,42 @@
 package main
 
 import (
-	"log"
-	"os"
-	"path/filepath"
+    "log"
+    "os"
 
-	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"botgo/internal/bot"
-	"botgo/internal/db"
+    "botgo/internal/bot"
+    "botgo/internal/db"
+    tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func main() {
-	// Carrega token da variável de ambiente
-	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if token == "" {
-		log.Fatal("TELEGRAM_BOT_TOKEN não definida. Configure a variável de ambiente.")
-	}
+    // Token do bot
+    token := "8320983858:AAG8ID2e7ReRk81YFEF3hJiqvD9HCDvLNlU"
+    if envToken := os.Getenv("TELEGRAM_BOT_TOKEN"); envToken != "" {
+        token = envToken
+    }
 
-	// Define caminho do banco de dados
-	dbPath := "estoque.db"
-	if dataDir := os.Getenv("DATA_DIR"); dataDir != "" {
-		dbPath = filepath.Join(dataDir, "estoque.db")
-	}
+    if token == "8320983858:AAG8ID2e7ReRk81YFEF3hJiqvD9HCDvLNlU" || token == "seu_token_aqui" {
+        log.Fatal("TELEGRAM_BOT_TOKEN não definido. Configure uma variável de ambiente.")
+    }
 
-	// Inicializa banco de dados
-	db.InitDB(dbPath)
+    // Inicializar banco de dados (sem parâmetros)
+    db.InitDB()
 
-	// Cria bot
-	b, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		log.Panic(err)
-	}
+    // Criar bot
+    b, err := tgbotapi.NewBotAPI(token)
+    if err != nil {
+        log.Panic(err)
+    }
 
-	// Debug apenas em desenvolvimento
-	b.Debug = os.Getenv("DEBUG") == "true"
+    // Desabilitar debug em produção
+    if os.Getenv("DEBUG") != "true" {
+        b.Debug = false
+    }
 
-	log.Printf("Bot autorizado em: %s", b.Self.UserName)
+    log.Printf("Bot autorizado em: %s", b.Self.UserName)
 
-	// Limpa qualquer webhook existente para evitar conflitos
-	deleteWebhookConfig := tgbotapi.DeleteWebhookConfig{
-		DropPendingUpdates: true,
-	}
-	_, err = b.Request(deleteWebhookConfig)
-	if err != nil {
-		log.Printf("Erro ao deletar webhook: %v", err)
-	}
-
-	log.Println("Bot iniciando...")
-	bot.Start(b)
+    // Iniciar bot
+    botInstance := bot.NewBot(b)
+    botInstance.Start()
 }
