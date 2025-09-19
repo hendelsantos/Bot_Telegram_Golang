@@ -1,45 +1,83 @@
 package modules
 
 import (
-	"encoding/csv"
-	"os"
-	"strconv"
-	"time"
+    "encoding/csv"
+    "fmt"
+    "log"
+    "os"
+    "strconv"
+    "time"
 
-	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"botgo/internal/db"
+    "botgo/internal/db"
+    tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func HandleExportarEstoque(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	filename := "estoque_export_" + time.Now().Format("20060102_150405") + ".csv"
-	file, err := os.Create(filename)
-	if err != nil {
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao criar arquivo de exportação.")
-		bot.Send(msg)
-		return
-	}
-	defer file.Close()
+func HandleExportarEstoque(bot *tgbotapi.BotAPI, chatID int64) {
+    // Buscar todos os itens
+    var itens []db.Item
+    result := db.DB.Find(&itens)
+    if result.Error != nil {
+        log.Printf("Erro ao buscar itens para exportação: %v", result.Error)
+        msg := tgbotapi.NewMessage(chatID, "❌ Erro ao buscar itens para exportação.")
+        bot.Send(msg)
+        return
+    }
 
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
+    // Criar arquivo CSV temporário
+    fileName := fmt.Sprintf("estoque_%d.csv", time.Now().Unix())
+    file, err := os.Create(fileName)
+    if err != nil {
+        log.Printf("Erro ao criar arquivo CSV: %v", err)
+        msg := tgbotapi.NewMessage(chatID, "❌ Erro ao criar arquivo de exportação.")
+        bot.Send(msg)
+        return
+    }
+    defer file.Close()
+    defer os.Remove(fileName) // Limpar arquivo após envio
 
-	writer.Write([]string{"ID", "Nome", "Descrição", "Quantidade", "Status", "Fornecedor", "DataEnvio"})
+    // Criar writer CSV
+    writer := csv.NewWriter(file)
+    defer writer.Flush()
 
-	var itens []db.Item
-	db.DB.Find(&itens)
-	for _, item := range itens {
-		writer.Write([]string{
-			strconv.Itoa(int(item.ID)),
-			item.Nome,
-			item.Descricao,
-			strconv.Itoa(item.Quantidade),
-			item.Status,
-			item.Fornecedor,
-			item.DataEnvio,
-		})
-	}
+    // Escrever cabeçalho
+    header := []string{"ID", "Nome", "Descrição", "Quantidade", "Status", "Fornecedor", "Data Envio"}
+    writer.Write(header)
 
-	sentFile := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(filename))
-	bot.Send(sentFile)
-	os.Remove(filename)
+    // Escrever dados
+    for _, item := range itens {
+        record := []string{
+            strconv.Itoa(int(item.ID)),
+            item.Nome,
+            item.Descricao,
+            strconv.Itoa(item.Quantidade),
+            item.Status,
+            item.Fornecedor,
+            formatDataEnvio(item.DataEnvio),
+        }
+        writer.Write(record)
+    }
+
+    // Enviar arquivo
+    doc := tgbotapi.NewDocument(chatID, tgbotapi.FilePath(fileName))
+    doc.Caption = fmt.Sprintf("📊 Exportação do Estoque\n\n📋 Total de itens: %d\n📅 Gerado em: %s", 
+        len(itens), time.Now().Format("02/01/2006 15:04"))
+    
+    _, err = bot.Send(doc)
+    if err != nil {
+        log.Printf("Erro ao enviar arquivo CSV: %v", err)
+        msg := tgbotapi.NewMessage(chatID, "❌ Erro ao enviar arquivo de exportação.")
+        bot.Send(msg)
+        return
+    }
+
+    msg := tgbotapi.NewMessage(chatID, "✅ Estoque exportado com sucesso!")
+    bot.Send(msg)
+}
+
+// Função helper para formatar data de envio
+func formatDataEnvio(dataEnvio *time.Time) string {
+    if dataEnvio == nil {
+        return ""
+    }
+    return dataEnvio.Format("02/01/2006")
 }

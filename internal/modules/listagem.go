@@ -400,7 +400,7 @@ func enviarItemDetalhado(bot *tgbotapi.BotAPI, chatID int64, itemID uint) {
 		mensagem.WriteString(fmt.Sprintf("🏢 **Fornecedor:** %s\n", item.Fornecedor))
 	}
 	
-	if item.DataEnvio != "" {
+	if item.DataEnvio != nil {
 		mensagem.WriteString(fmt.Sprintf("📅 **Data Envio:** %s\n", item.DataEnvio))
 	}
 	
