@@ -1,46 +1,57 @@
 package db
 
 import (
-"log"
-"os"
+    "log"
+    "os"
 
-"gorm.io/driver/sqlite"
-"gorm.io/gorm"
+    "gorm.io/driver/sqlite"
+    "gorm.io/gorm"
+    _ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
 var DB *gorm.DB
 
-func InitDB(path string) {
-var err error
+func InitDB() {
+    var err error
+    
+    // Verificar se estamos no Railway (ambiente de produção)
+    if os.Getenv("RAILWAY_ENVIRONMENT") != "" {
+        log.Println("Detectado ambiente Railway")
+        // No Railway, usar banco em memória
+        DB, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+        if err != nil {
+            log.Printf("Erro crítico ao conectar ao banco: %v", err)
+            os.Exit(1)
+        }
+        log.Println("Conectado ao banco: :memory:")
+    } else {
+        // Localmente, usar arquivo
+        dbPath := os.Getenv("DB_PATH")
+        if dbPath == "" {
+            dbPath = "estoque.db"
+        }
+        
+        DB, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+        if err != nil {
+            log.Printf("Erro ao conectar ao banco local: %v", err)
+            // Fallback para memória se arquivo falhar
+            DB, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+            if err != nil {
+                log.Printf("Erro crítico ao conectar ao banco: %v", err)
+                os.Exit(1)
+            }
+            log.Println("Conectado ao banco: :memory: (fallback)")
+        } else {
+            log.Printf("Conectado ao banco: %s", dbPath)
+        }
+    }
 
-// Para Railway (produção), tratar erros de CGO graciosamente
-if os.Getenv("RAILWAY_ENVIRONMENT") != "" {
-log.Println("Detectado ambiente Railway")
-// Tenta primeiro com arquivo normal
-DB, err = gorm.Open(sqlite.Open(path), &gorm.Config{})
-if err != nil {
-log.Printf("Erro ao criar banco de arquivo, usando in-memory: %v", err)
-// Fallback para in-memory
-DB, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-if err != nil {
-log.Fatalf("Erro crítico ao conectar ao banco: %v", err)
-}
-}
-} else {
-// Desenvolvimento local - usa arquivo
-DB, err = gorm.Open(sqlite.Open(path), &gorm.Config{})
-if err != nil {
-log.Fatalf("Erro ao conectar ao banco de dados: %v", err)
-}
-}
-
-// Migra as tabelas
-if err := AutoMigrate(DB); err != nil {
-log.Fatalf("Erro ao migrar banco de dados: %v", err)
-}
-if err := AutoMigrateHistorico(DB); err != nil {
-log.Fatalf("Erro ao migrar tabela de histórico: %v", err)
-}
-
-log.Println("Banco de dados inicializado com sucesso!")
+    // Migrar as tabelas
+    err = DB.AutoMigrate(&Item{}, &Movimentacao{})
+    if err != nil {
+        log.Printf("Erro ao migrar tabelas: %v", err)
+        os.Exit(1)
+    }
+    
+    log.Println("Database inicializado com sucesso")
 }
