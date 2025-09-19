@@ -1,119 +1,118 @@
 package bot
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"log"
+	"strings"
 	"time"
-	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
+
 	"botgo/internal/modules"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// generateSessionID gera um ID único para cada sessão do bot
-func generateSessionID() string {
-	bytes := make([]byte, 8)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+type Bot struct {
+	api *tgbotapi.BotAPI
 }
 
-// StartWithSmartRetry inicia o bot com retry inteligente
-func Start(bot *tgbotapi.BotAPI) {
-	// Limpa webhook primeiro
-	deleteWebhookConfig := tgbotapi.DeleteWebhookConfig{
-		DropPendingUpdates: true,
+func NewBot(api *tgbotapi.BotAPI) *Bot {
+	return &Bot{api: api}
+}
+
+// Start inicia o loop principal do bot usando polling.
+func (b *Bot) Start() {
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := b.api.GetUpdatesChan(u)
+
+	log.Println("Aguardando mensagens...")
+	for update := range updates {
+		b.ProcessUpdate(update)
 	}
-	_, err := bot.Request(deleteWebhookConfig)
-	if err != nil {
-		log.Printf("Erro ao deletar webhook: %v", err)
+}
+
+// ProcessUpdate é o roteador central de todas as atualizações recebidas.
+func (b *Bot) ProcessUpdate(update tgbotapi.Update) {
+	// Ignora qualquer coisa que não seja uma mensagem
+	if update.Message == nil {
+		return
 	}
-	
-	// Aguarda estabilização
-	time.Sleep(3 * time.Second)
-	
-	sessionID := generateSessionID()
-	log.Printf("Iniciando nova sessão com ID: %s", sessionID)
-	
-	retryCount := 0
-	maxRetries := 10
-	baseDelay := 5 * time.Second
-	
-	for retryCount < maxRetries {
-		log.Printf("Tentativa %d/%d de conexão", retryCount+1, maxRetries)
-		
-		updateConfig := tgbotapi.NewUpdate(0)
-		updateConfig.Timeout = 30
-		updateConfig.Limit = 5
-		
-		// Tenta obter updates
-		updates := bot.GetUpdatesChan(updateConfig)
-		
-		// Processa mensagens
-		conflictDetected := false
-		for update := range updates {
-			if update.Message == nil {
-				continue
-			}
-			
-			// Verifica se é um erro de conflito no log
-			log.Printf("Mensagem recebida de %s: %s", update.Message.From.UserName, update.Message.Text)
-			
-			// Processa normalmente
-			if update.Message.IsCommand() {
-				switch update.Message.Command() {
-				case "start":
-					modules.HandleStart(bot, update)
-				case "menu":
-					modules.HandleMenu(bot, update)
-				case "novoitem":
-					modules.HandleNovoItem(bot, update)
-				case "buscar":
-					modules.HandleBuscar(bot, update)
-				case "atualizar":
-					modules.HandleAtualizar(bot, update)
-				case "enviar_reparo":
-					modules.HandleEnviarReparo(bot, update)
-				case "retornar_reparo":
-					modules.HandleRetornarReparo(bot, update)
-				case "exportar_estoque":
-					modules.HandleExportarEstoque(bot, update)
-				case "historico":
-					modules.HandleHistorico(bot, update)
-				// Novos comandos de listagem
-				case "listar", "listar_resumo", "listar_status", "listar_baixo_estoque", "listar_detalhado":
-					modules.HandleListar(bot, update)
-				case "ajuda_listagem":
-					modules.HandleAjudaListagem(bot, update)
-				default:
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Comando não reconhecido. Use /menu para ver todos os comandos disponíveis.")
-					bot.Send(msg)
-				}
-			} else {
-				// Verifica em qual fluxo o usuário está
-				if modules.IsUserInCadastroFlow(update.Message.From.ID) {
-					modules.HandleNovoItem(bot, update)
-				} else if modules.IsUserInAtualizacaoFlow(update.Message.From.ID) {
-					modules.HandleAtualizar(bot, update)
-				} else if modules.IsUserInReparoFlow(update.Message.From.ID) {
-					modules.HandleEnviarReparo(bot, update)
-				} else {
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Use /menu para ver todos os comandos disponíveis.")
-					bot.Send(msg)
-				}
-			}
+
+	message := update.Message
+	chatID := message.Chat.ID
+
+	log.Printf("[%s] %s", message.From.UserName, message.Text)
+
+	// Se for um comando, processa o comando.
+	if message.IsCommand() {
+		// Limpa qualquer estado de fluxo anterior ao receber um novo comando
+		modules.ClearUserState(chatID)
+		modules.ClearCadastroState(chatID)
+		modules.ClearAtualizacaoState(chatID)
+		modules.ClearReparoState(chatID)
+
+		switch message.Command() {
+		case "start", "menu", "help":
+			modules.HandleMenu(b.api, chatID)
+		case "novoitem":
+			modules.HandleNovoItem(b.api, message)
+		case "buscar":
+			modules.HandleBuscar(b.api, message)
+		case "atualizar":
+			modules.HandleAtualizar(b.api, message)
+		case "enviar_reparo":
+			modules.HandleEnviarReparo(b.api, message)
+		case "retornar_reparo":
+			modules.HandleRetornarReparo(b.api, message)
+		case "exportar_estoque":
+			modules.HandleExportarEstoque(b.api, chatID)
+		case "historico":
+			modules.HandleHistorico(b.api, message)
+		case "listar", "listar_resumo", "listar_detalhado", "listar_status", "listar_baixo_estoque":
+			modules.HandleListagem(b.api, message)
+		case "ajuda_listagem":
+			modules.HandleAjudaListagem(b.api, chatID)
+		default:
+			msg := tgbotapi.NewMessage(chatID, "Comando não reconhecido. Use /menu para ver a lista de comandos.")
+			b.api.Send(msg)
 		}
-		
-		// Se chegou aqui, houve erro na conexão
-		if !conflictDetected {
-			retryCount++
-			delay := time.Duration(retryCount) * baseDelay
-			log.Printf("Conexão perdida, aguardando %v antes da próxima tentativa...", delay)
-			time.Sleep(delay)
-			
-			// Tenta limpar novamente
-			bot.Request(deleteWebhookConfig)
-			time.Sleep(2 * time.Second)
+		return
+	}
+
+	// Se não for um comando, verifica se o usuário está em algum fluxo de conversa.
+	if modules.IsUserInCadastroFlow(chatID) {
+		modules.ProcessCadastroFlow(b.api, message)
+		return
+	}
+	if modules.IsUserInAtualizacaoFlow(chatID) {
+		modules.ProcessAtualizacaoFlow(b.api, message)
+		return
+	}
+	if modules.IsUserInReparoFlow(chatID) {
+		modules.ProcessReparoFlow(b.api, message)
+		return
+	}
+
+	// Se não for comando e não estiver em nenhum fluxo, ignora.
+}
+
+// StartWithImprovedPolling é uma alternativa com mais configurações.
+func (b *Bot) StartWithImprovedPolling() {
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 30
+	u.Limit = 5
+
+	// Limpa webhooks pendentes
+	_, _ = b.api.Request(tgbotapi.DeleteWebhookConfig{})
+
+	updates := b.api.GetUpdatesChan(u)
+	log.Println("Aguardando mensagens com polling aprimorado...")
+
+	for {
+		select {
+		case update := <-updates:
+			b.ProcessUpdate(update)
+		case <-time.After(30 * time.Second):
+			// Timeout, apenas para garantir que o loop não bloqueie para sempre
 		}
 	}
-	
-	log.Printf("Máximo de tentativas (%d) atingido. Encerrando...", maxRetries)
 }
