@@ -1,19 +1,26 @@
 package modules
 
-// IsUserInCadastroFlow verifica se um usuário está no fluxo de cadastro
-func IsUserInCadastroFlow(userID int64) bool {
-	_, exists := userStates[userID]
-	return exists
+// Estados de usuário para diferentes fluxos
+var userStateGlobal = make(map[int64]string)
+
+func IsUserInCadastroFlow(chatID int64) bool {
+    state, exists := userStateGlobal[chatID]
+    return exists && state == "cadastro"
 }
 
-// IsUserInAtualizacaoFlow verifica se um usuário está no fluxo de atualização
-func IsUserInAtualizacaoFlow(userID int64) bool {
-	_, exists := atualizaStates[userID]
-	return exists
+func IsUserInAtualizacaoFlow(chatID int64) bool {
+    state, exists := userStateGlobal[chatID]
+    return exists && (state == "atualizacao_nome" || state == "atualizacao_descricao" || state == "atualizacao_quantidade" || state == "atualizacao_foto")
 }
 
-// IsUserInReparoFlow verifica se um usuário está no fluxo de reparo
-func IsUserInReparoFlow(userID int64) bool {
-	_, exists := reparoStates[userID]
-	return exists
+func ClearUserState(chatID int64) {
+    delete(userStateGlobal, chatID)
+}
+
+func SetUserState(chatID int64, state string) {
+    userStateGlobal[chatID] = state
+}
+
+func GetUserState(chatID int64) string {
+    return userStateGlobal[chatID]
 }
